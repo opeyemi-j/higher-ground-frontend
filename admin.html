@@ -81,6 +81,12 @@
   .pager button{background:var(--paper);color:var(--ink);border:1.5px solid #D6E4EA;}
   .pager button:hover{background:#F5FAFC;}
   .pager span{align-self:center;font-weight:700;font-size:14px;color:var(--ink-soft);}
+  .delete-btn{
+    background:transparent;color:#E24B4A;border:1.5px solid #F3C6C6;
+    padding:6px 14px;font-size:13px;border-radius:999px;
+  }
+  .delete-btn:hover{background:#FDECEC;}
+  .delete-btn:disabled{opacity:.5;cursor:not-allowed;}
 
   .hidden{display:none;}
 </style>
@@ -122,6 +128,7 @@
         <th>Phone</th>
         <th>Stage</th>
         <th>Message</th>
+        <th>Actions</th>
       </tr>
     </thead>
     <tbody id="tableBody"></tbody>
@@ -204,13 +211,14 @@
 
         tableBody.innerHTML = data.submissions.map(function (s) {
           var stageClass = 'stage-' + (s.stage || '').replace(/[^A-Za-z]/g, '');
-          return '<tr>' +
+          return '<tr data-id="' + s.id + '">' +
             '<td>' + escapeHtml(formatDate(s.created_at)) + '</td>' +
             '<td>' + escapeHtml(s.parent_name) + '</td>' +
             '<td>' + escapeHtml(s.email) + '</td>' +
             '<td>' + escapeHtml(s.phone) + '</td>' +
             '<td><span class="stage-badge ' + stageClass + '">' + escapeHtml(s.stage) + '</span></td>' +
             '<td class="msg-cell">' + (s.message ? escapeHtml(s.message) : '<em>&mdash;</em>') + '</td>' +
+            '<td><button class="delete-btn" data-delete-id="' + s.id + '">Delete</button></td>' +
             '</tr>';
         }).join('');
 
@@ -231,6 +239,42 @@
         showOnly(errorState);
       });
   }
+
+  function deleteSubmissionRow(id, btn) {
+    if (!confirm('Delete this submission? This cannot be undone.')) return;
+
+    btn.disabled = true;
+    btn.textContent = 'Deleting...';
+
+    fetch(API_BASE + '/api/submissions/' + id, {
+      method: 'DELETE',
+      headers: { 'x-api-key': currentApiKey },
+    })
+      .then(function (res) {
+        if (res.status === 401) throw new Error('UNAUTHORIZED');
+        if (!res.ok) return res.json().then(function (d) { throw new Error(d.error || 'Delete failed'); });
+        return res.json();
+      })
+      .then(function () {
+        loadSubmissions();
+      })
+      .catch(function (err) {
+        if (err.message === 'UNAUTHORIZED') {
+          logout();
+          loginError.textContent = 'Session expired or key is invalid. Please log in again.';
+          return;
+        }
+        alert('Could not delete: ' + err.message);
+        btn.disabled = false;
+        btn.textContent = 'Delete';
+      });
+  }
+
+  tableBody.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-delete-id]');
+    if (!btn) return;
+    deleteSubmissionRow(btn.getAttribute('data-delete-id'), btn);
+  });
 
   function login() {
     var key = apiKeyInput.value.trim();
